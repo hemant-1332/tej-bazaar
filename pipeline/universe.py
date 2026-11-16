@@ -54,6 +54,7 @@ def build_universe(
     top_n: int = TOP_N,
     window: int = WINDOW,
     chain: pl.DataFrame | None = None,
+    anchors: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """Compute monthly point-in-time top-``top_n`` by trailing turnover.
 
@@ -68,8 +69,23 @@ def build_universe(
         return pl.DataFrame(schema=UNIVERSE_SCHEMA)
 
     base = prices.select("date", "symbol", "isin", "name", "turnover")
+    if anchors is not None and not anchors.is_empty():
+        base = base.join(
+            anchors.rename({"isin": "_anchor_isin"}), on="symbol", how="left"
+        )
+    else:
+        base = base.with_columns(pl.lit(None, dtype=pl.Utf8).alias("_anchor_isin"))
+    # Internal identity only: never replace the exchange-reported ISIN.
+    base = base.with_columns(
+        pl.coalesce(
+            pl.when(pl.col("isin").fill_null("") == "")
+            .then(pl.col("_anchor_isin"))
+            .otherwise(pl.col("isin")),
+            pl.lit(""),
+        ).alias("_key_isin")
+    )
     if chain is not None and not chain.is_empty():
-        base = base.join(chain, on="isin", how="left")
+        base = base.join(chain, left_on="_key_isin", right_on="isin", how="left")
     else:
         base = base.with_columns(pl.lit(None, dtype=pl.Utf8).alias("chain_isin"))
     df = (
@@ -82,10 +98,12 @@ def build_universe(
         .with_columns(
             pl.coalesce(
                 pl.col("chain_isin"),
-                pl.when(pl.col("isin") == "").then(pl.col("symbol")).otherwise(pl.col("isin")),
+                pl.when(pl.col("_key_isin") == "")
+                .then(pl.col("symbol"))
+                .otherwise(pl.col("_key_isin")),
             ).alias("key")
         )
-        .drop("chain_isin")
+        .drop("chain_isin", "_anchor_isin", "_key_isin")
         # One row per (key, date): a symbol listed in two series the same
         # day counts its turnover once, on the busier series.
         .sort(["key", "date", "turnover"], descending=[False, False, True])

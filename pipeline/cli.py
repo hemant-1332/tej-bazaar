@@ -1862,10 +1862,13 @@ def universe_build(
         from pipeline.isin_backfill import apply_isin_anchors, isin_anchors
 
         prices = read_bhavcopy(paths)
-        # Chains need the backfilled ISINs so pre-2012 rows link up too;
-        # the universe itself is built on the raw rows (isin as reported).
-        keyed = apply_isin_anchors(prices, isin_anchors(prices))
-        uni = build_universe(prices, ex, top_n=top_n, chain=chain_map(keyed))
+        # Use continuity anchors for the internal rolling key while retaining
+        # the raw exchange-reported ISIN in the published universe.
+        anchors = isin_anchors(prices)
+        keyed = apply_isin_anchors(prices, anchors)
+        uni = build_universe(
+            prices, ex, top_n=top_n, chain=chain_map(keyed), anchors=anchors
+        )
         out = out_dir / f"{ex.lower()}_liquid.parquet"
         uni.write_parquet(out, compression="zstd")
         n_rb = uni["rebalance_date"].n_unique() if not uni.is_empty() else 0

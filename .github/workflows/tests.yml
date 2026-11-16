@@ -31,7 +31,7 @@ jobs:
       - name: Install package and development dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,reconcile]"
 
       - name: Run ISIN cutover regression test
         run: python -m pytest -q tests/test_universe.py::test_isin_cutover_anchor_preserves_rolling_window_and_raw_output_isin

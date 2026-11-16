@@ -30,8 +30,5 @@ jobs:
       - name: Install locked package and test dependencies
         run: uv sync --locked --extra dev --extra reconcile
 
-      - name: Run ISIN cutover regression test
-        run: uv run pytest -q tests/test_universe.py::test_isin_cutover_anchor_preserves_rolling_window_and_raw_output_isin
-
-      - name: Run complete test suite
-        run: uv run pytest -q
+      - name: Run universe, ISIN and instrument regression tests
+        run: uv run pytest -q tests/test_universe.py tests/test_isin_backfill.py tests/test_instrument.py

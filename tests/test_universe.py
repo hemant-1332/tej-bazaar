@@ -4,7 +4,7 @@ import polars as pl
 
 from pipeline.universe import build_universe, members_as_of
 from pipeline.instrument import chain_map
-from pipeline.isin_backfill import apply_isin_anchors
+from pipeline.isin_backfill import apply_isin_anchors, isin_anchors
 
 
 def _prices(n_days=140, symbols=("AAA", "BBB", "CCC", "DDD")):
@@ -85,7 +85,8 @@ def test_isin_cutover_anchor_preserves_rolling_window_and_raw_output_isin():
         day += timedelta(days=1)
 
     prices = pl.DataFrame(rows)
-    anchors = pl.DataFrame({"symbol": ["AAA"], "isin": ["INAAA"]})
+    anchors = isin_anchors(prices)
+    assert anchors.to_dict(as_series=False) == {"symbol": ["AAA"], "isin": ["INAAA"]}
     keyed = apply_isin_anchors(prices, anchors)
     chain = chain_map(keyed)
 

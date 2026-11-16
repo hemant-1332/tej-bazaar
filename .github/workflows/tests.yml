@@ -4,8 +4,6 @@ on:
   pull_request:
     branches: [master]
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [fix/isin-anchor-universe-key-2011]
 
 permissions:
   contents: read

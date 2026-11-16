@@ -84,7 +84,7 @@ def test_isin_cutover_anchor_preserves_rolling_window_and_raw_output_isin():
             })
         day += timedelta(days=1)
 
-    prices = pl.DataFrame(rows)
+    prices = pl.DataFrame(rows, schema_overrides={"isin": pl.String})
     anchors = isin_anchors(prices)
     assert anchors.to_dict(as_series=False) == {"symbol": ["AAA"], "isin": ["INAAA"]}
     keyed = apply_isin_anchors(prices, anchors)

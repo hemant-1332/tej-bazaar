@@ -3,6 +3,8 @@ from datetime import date, timedelta
 import polars as pl
 
 from pipeline.universe import build_universe, members_as_of
+from pipeline.instrument import chain_map
+from pipeline.isin_backfill import apply_isin_anchors, isin_anchors
 
 
 def _prices(n_days=140, symbols=("AAA", "BBB", "CCC", "DDD")):
@@ -66,3 +68,39 @@ def test_members_as_of_picks_latest_rebalance_and_rank_filter():
 def test_empty_and_short_history():
     assert build_universe(pl.DataFrame(), "nse").is_empty()
     assert build_universe(_prices(n_days=30), "nse").is_empty()
+
+
+def test_isin_cutover_anchor_preserves_rolling_window_and_raw_output_isin():
+    rows = []
+    day = date(2011, 1, 3)
+    while day <= date(2011, 7, 1):
+        if day.weekday() < 5:
+            rows.append({
+                "date": day,
+                "symbol": "AAA",
+                "isin": None if day < date(2011, 6, 22) else "INAAA",
+                "name": "AAA Ltd",
+                "turnover": 100.0,
+            })
+        day += timedelta(days=1)
+
+    prices = pl.DataFrame(rows, schema_overrides={"isin": pl.String})
+    anchors = isin_anchors(prices)
+    assert anchors.to_dict(as_series=False) == {"symbol": ["AAA"], "isin": ["INAAA"]}
+    keyed = apply_isin_anchors(prices, anchors)
+    chain = chain_map(keyed)
+
+    # Without the anchor, the rolling history resets when ISIN first appears.
+    broken = build_universe(prices, "nse", top_n=1, chain=chain)
+    assert date(2011, 7, 1) not in broken["rebalance_date"].to_list()
+
+    fixed = build_universe(prices, "nse", top_n=1, chain=chain, anchors=anchors)
+    july = fixed.filter(pl.col("rebalance_date") == date(2011, 7, 1))
+    assert july.height == 1
+    assert july["symbol"].to_list() == ["AAA"]
+    assert july["rank"].to_list() == [1]
+
+    # Published ISIN stays as reported: pre-cutover values remain blank.
+    june = fixed.filter(pl.col("rebalance_date") == date(2011, 6, 1))
+    assert june.height == 1
+    assert june["isin"].to_list() == [""]
